@@ -1,0 +1,93 @@
+diff --git a/l1-contracts/scripts/deploy.ts b/l1-contracts/scripts/deploy.ts
+index 16ac2e3d..87d656e7 100644
+--- a/l1-contracts/scripts/deploy.ts
++++ b/l1-contracts/scripts/deploy.ts
+@@ -79,7 +79,7 @@ async function main() {
+       });
+       nonce++;
+ 
+-      await deployer.deployBlobVersionedHashRetriever(create2Salt, { gasPrice, nonce: nonce++ });
++      // await deployer.deployBlobVersionedHashRetriever(create2Salt, { gasPrice, nonce: nonce++ });
+       await deployer.deployGovernance(create2Salt, { gasPrice, nonce });
+       await deployer.deployZkSyncContract(create2Salt, gasPrice, nonce + 1);
+       await deployer.deployBridgeContracts(create2Salt, gasPrice); // Do not pass nonce, since it was increment after deploying zkSync contracts
+diff --git a/l1-contracts/src.ts/deploy-utils.ts b/l1-contracts/src.ts/deploy-utils.ts
+index e60f3d30..1bb0f9ee 100644
+--- a/l1-contracts/src.ts/deploy-utils.ts
++++ b/l1-contracts/src.ts/deploy-utils.ts
+@@ -51,6 +51,7 @@ export async function deployBytecodeViaCreate2(
+     }
+   };
+   log(`Deploying ${contractName}`);
++  log(`create2 at {${create2FactoryAddress}}`);
+ 
+   const create2Factory = SingletonFactoryFactory.connect(create2FactoryAddress, deployWallet);
+   const expectedAddress = ethers.utils.getCreate2Address(
+@@ -70,6 +71,8 @@ export async function deployBytecodeViaCreate2(
+ 
+   const gasUsed = receipt.gasUsed;
+   log(`${contractName} deployed, gasUsed: ${gasUsed.toString()}`);
++  // log(`expectedAddress: ${expectedAddress}`);
++  // log(`txHash: ${tx.hash}`);
+ 
+   const deployedBytecodeAfter = await deployWallet.provider.getCode(expectedAddress);
+   if (ethers.utils.hexDataLength(deployedBytecodeAfter) == 0) {
+diff --git a/l1-contracts/src.ts/deploy.ts b/l1-contracts/src.ts/deploy.ts
+index b951aebf..c0b8d952 100644
+--- a/l1-contracts/src.ts/deploy.ts
++++ b/l1-contracts/src.ts/deploy.ts
+@@ -103,7 +103,7 @@ export class Deployer {
+         priorityTxMaxGasLimit,
+         initialProtocolVersion,
+         feeParams,
+-        blobVersionedHashRetriever: this.addresses.BlobVersionedHashRetriever,
++        blobVersionedHashRetriever: "0x0000000000000000000000000000000000000000",
+       },
+     ]);
+ 
+diff --git a/l1-contracts/src.ts/diamondCut.ts b/l1-contracts/src.ts/diamondCut.ts
+index 564a3e53..b223cb76 100644
+--- a/l1-contracts/src.ts/diamondCut.ts
++++ b/l1-contracts/src.ts/diamondCut.ts
+@@ -5,6 +5,10 @@ import type { Wallet } from "ethers";
+ import { ethers } from "ethers";
+ import { IZkSyncFactory } from "../typechain/IZkSyncFactory";
+ import { IBaseFactory } from "../typechain/IBaseFactory";
++import { AdminFacetFactory } from "../typechain";
++import { GettersFacetFactory } from "../typechain";
++import { MailboxFacetFactory } from "../typechain";
++import { ExecutorFacetFactory } from "../typechain";
+ 
+ // Some of the facets are to be removed with the upcoming upgrade.
+ const UNCONDITIONALLY_REMOVED_FACETS = ["DiamondCutFacet", "GovernanceFacet"];
+@@ -65,22 +69,22 @@ export async function getCurrentFacetCutsForAdd(
+   if (adminAddress) {
+     // Should be unfreezable. The function to unfreeze contract is located on the admin facet.
+     // That means if the admin facet will be freezable, the proxy can NEVER be unfrozen.
+-    const adminFacet = await hardhat.ethers.getContractAt("AdminFacet", adminAddress);
+-    facetsCuts["AdminFacet"] = facetCut(adminFacet.address, adminFacet.interface, Action.Add, false);
++    const adminFacet = AdminFacetFactory.connect(adminAddress, hardhat.ethers.provider);
++    facetsCuts["AdminFacet"] = facetCut(adminAddress, adminFacet.interface, Action.Add, false);
+   }
+   if (gettersAddress) {
+     // Should be unfreezable. There are getters, that users can expect to be available.
+-    const getters = await hardhat.ethers.getContractAt("GettersFacet", gettersAddress);
+-    facetsCuts["GettersFacet"] = facetCut(getters.address, getters.interface, Action.Add, false);
++    const getters = GettersFacetFactory.connect(gettersAddress, hardhat.ethers.provider);
++    facetsCuts["GettersFacet"] = facetCut(gettersAddress, getters.interface, Action.Add, false);
+   }
+   // These contracts implement the logic without which we can get out of the freeze.
+   if (mailboxAddress) {
+-    const mailbox = await hardhat.ethers.getContractAt("MailboxFacet", mailboxAddress);
+-    facetsCuts["MailboxFacet"] = facetCut(mailbox.address, mailbox.interface, Action.Add, true);
++    const mailbox = MailboxFacetFactory.connect(mailboxAddress, hardhat.ethers.provider);
++    facetsCuts["MailboxFacet"] = facetCut(mailboxAddress, mailbox.interface, Action.Add, true);
+   }
+   if (executorAddress) {
+-    const executor = await hardhat.ethers.getContractAt("ExecutorFacet", executorAddress);
+-    facetsCuts["ExecutorFacet"] = facetCut(executor.address, executor.interface, Action.Add, true);
++    const executor = ExecutorFacetFactory.connect(executorAddress, hardhat.ethers.provider);
++    facetsCuts["ExecutorFacet"] = facetCut(executorAddress, executor.interface, Action.Add, true);
+   }
+ 
+   return facetsCuts;
